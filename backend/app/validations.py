@@ -39,3 +39,20 @@ def validate_password(data):
     if len(password) < 8:
         raise ValidationError('Your password must be at least 8 characters long.')
     return True
+
+def profile_validation(data, user):
+    email = data.get('email')
+    body_fat = data.get('body_fat')
+
+    if email and UserModel.objects.filter(email=email).exclude(user_id=user.user_id).exists():
+        raise ValidationError('This email is already in use. Please choose another one.')
+
+    if body_fat is not None:
+        try:
+            body_fat = float(body_fat)
+            if not (0 <= body_fat <= 100):
+                raise ValidationError('Body fat percentage must be between 0 and 100.')
+        except ValueError:
+            raise ValidationError('Invalid body fat percentage.')
+
+    return data

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.core.exceptions import ValidationError
+from .models import Food
 
 UserModel = get_user_model()
 
@@ -34,4 +35,16 @@ class UserLoginSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
-        fields = ('email',)
+        fields = ('email', 'height', 'weight', 'body_fat', 'target')
+
+    def validate_email(self, value):
+        if UserModel.objects.filter(email=value).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError("This email is already in use. Please choose another one.")
+        return value
+
+        
+
+class FoodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Food
+        fields = '__all__'
