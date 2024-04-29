@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, TextInput, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import axios from 'axios';
+import DropDownPicker from 'react-native-dropdown-picker';
 import { useRouter } from 'expo-router';
 import styles from '../Styles/Profile.Styles';
 
@@ -10,15 +11,26 @@ const ProfilePage = () => {
   const [editMode, setEditMode] = useState(false);
   const [editableUserInfo, setEditableUserInfo] = useState({});
   const [errorMessages, setErrorMessages] = useState('');
+  const [workoutPlans, setWorkoutPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [openDropdown, setOpenDropdown] = useState(false);
 
   useEffect(() => {
     axios.get("http://192.168.0.29:8000/api/user", { withCredentials: true })
       .then(response => {
         setUserInfo(response.data.user);
-        setEditableUserInfo(response.data.user); // Initialize editableUserInfo
+        setEditableUserInfo(response.data.user);
+        setSelectedPlan(response.data.user.workout_plan);
       })
       .catch(error => {
         console.error("Error fetching user data:", error);
+      });
+    axios.get("http://192.168.0.29:8000/api/workout_plans", { withCredentials: true })
+      .then(response => {
+        setWorkoutPlans(response.data.map(plan => ({ label: plan.name, value: plan.id })));
+      })
+      .catch(error => {
+        console.error("Error fetching workout plans:", error);
       });
   }, []);
 
@@ -34,8 +46,11 @@ const ProfilePage = () => {
   };
 
   const toggleEditMode = () => {
+    if (editMode) {
+      setEditableUserInfo(userInfo);
+      setSelectedPlan(userInfo.workout_plan);
+    }
     setEditMode(!editMode);
-    setEditableUserInfo(userInfo); // Reset any edits made
   };
 
   const handleSave = () => {
@@ -43,7 +58,12 @@ const ProfilePage = () => {
       .then(csrfResponse => {
         const csrfToken = csrfResponse.data.csrfToken;
 
-        axios.put("http://192.168.0.29:8000/api/update_profile/", editableUserInfo, {
+        const updatePayload = {
+          ...editableUserInfo,
+          workout_plan: selectedPlan,
+        };
+
+        axios.put("http://192.168.0.29:8000/api/update_profile/", updatePayload, {
           withCredentials: true,
           headers: {
             'X-CSRFToken': csrfToken,
@@ -53,6 +73,10 @@ const ProfilePage = () => {
             setUserInfo(response.data);
             setEditMode(false);
             setErrorMessages('');
+            setSelectedPlan(response.data.workout_plan);
+            console.log(global.needRefresh)
+            global.needRefresh = true;
+            console.log(global.needRefresh)
           })
           .catch(error => {
             if (error.response && error.response.data) {
@@ -117,13 +141,40 @@ const ProfilePage = () => {
               />
             </View>
             <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Target (kg):</Text>
+              <Text style={styles.label}>Target weight (kg):</Text>
               <TextInput
                 style={styles.input}
-                onChangeText={(text) => handleChange('target', text)}
-                value={`${editableUserInfo.target}`}
+                onChangeText={(text) => handleChange('target_weight', text)}
+                value={`${editableUserInfo.target_weight}`}
                 keyboardType="numeric"
               />
+            </View>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Target Body Fat (%):</Text>
+              <TextInput
+                style={styles.input}
+                onChangeText={(text) => handleChange('target_body_fat', text)}
+                value={`${editableUserInfo.target_body_fat}`}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Workout Plan:</Text>
+              <View style={styles.dropView}>
+                <DropDownPicker
+                  style={styles.dropdown}
+                  open={openDropdown}
+                  value={selectedPlan}
+                  items={workoutPlans}
+                  setOpen={setOpenDropdown}
+                  setValue={setSelectedPlan}
+                  setItems={setWorkoutPlans}
+                  zIndex={3000}
+                  zIndexInverse={1000}
+                  dropDownContainerStyle={styles.dropdownoptions}
+                  labelStyle={{ fontSize: 17 }}
+                />
+              </View>
             </View>
             {editMode && errorMessages ? <Text style={styles.error}>{errorMessages}</Text> : null}
             <View style={styles.buttonContainer}>
@@ -154,8 +205,20 @@ const ProfilePage = () => {
               <Text style={styles.textInfo}> {userInfo.body_fat} %</Text>
             </View>
             <View style={styles.textContainer}>
-              <Text style={styles.text}>Target: </Text>
-              <Text style={styles.textInfo}> {userInfo.target} kg</Text>
+              <Text style={styles.text}>Target Weight: </Text>
+              <Text style={styles.textInfo}> {userInfo.target_weight} kg</Text>
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.text}>Target Body Fat: </Text>
+              <Text style={styles.textInfo}> {userInfo.target_body_fat} %</Text>
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.text}>Workout Plan: </Text>
+              <Text style={styles.textInfo}>
+                {selectedPlan
+                  ? ` ${workoutPlans.find(plan => plan.value === selectedPlan)?.label}`
+                  : " Choose a workout plan"}
+              </Text>
             </View>
             <View style={styles.buttonContainer}>
               <Pressable style={styles.editButton} onPress={() => setEditMode(true)}>
@@ -168,7 +231,7 @@ const ProfilePage = () => {
           </>
         )}
       </View>
-    </TouchableWithoutFeedback>
+    </TouchableWithoutFeedback >
   );
 }
 

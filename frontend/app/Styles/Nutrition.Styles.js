@@ -38,10 +38,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderColor: '#eee',
+    padding: 10,
   },
   boldText: {
     fontWeight: 'bold',
-    marginRight: 10,
+    flex: 1, // ensures it takes the space it needs
   },
   dateHeader: {
     fontSize: 18,
@@ -61,11 +62,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   nutritionInfo: {
-    flex: 1,
+    flex: 3,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    justifyContent: 'space-around',
+    marginRight: 20,
   },
+  deleteButton: {
+    backgroundColor: 'red',
+    padding: 10,
+    borderRadius: 5,
+  },
+  deleteText: {
+    color: '#fff',
+    textAlign: 'center',
+  },
+  errorMessage: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: 'red',
+    backgroundColor: '#fff0f0', 
+    padding: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ffcccc',
+    marginHorizontal: 20,
+    marginTop: 20,
+  },
+  
 });
 
 export default styles;

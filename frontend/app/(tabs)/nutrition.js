@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, FlatList, Image, ScrollView, Pressable, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import React, { useState, useEffect, useCallback} from 'react';
+import { View, Text, TextInput, FlatList, Image, ScrollView, Pressable } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import axios from 'axios';
 import styles from '../Styles/Nutrition.Styles';
+import { useFocusEffect } from '@react-navigation/native';
 
 const Nutrition = () => {
   const router = useRouter();
@@ -16,13 +17,65 @@ const Nutrition = () => {
   const { refresh: refreshParam } = useLocalSearchParams();
   const [groupedFoods, setGroupedFoods] = useState([]);
   const flatListHeight = Math.min(suggestions.common.length + suggestions.branded.length) * 28;
+  const [csrfToken, setCsrfToken] = useState('');
+  const [targetCalories, setTargetCalories] = useState(2000);
+  const [targetProtein, setTargetProtein] = useState(200);
+  const [profileComplete, setProfileComplete] = useState(null);
+
+    const fetchUserTargets = async () => {
+      try {
+        const response = await axios.get('http://192.168.0.29:8000/api/user', { withCredentials: true });
+        console.log(response.data.user.daily_calories_target)
+        if (response.data.user.daily_calories_target && response.data.user.daily_protein_target) {
+          setTargetCalories(response.data.user.daily_calories_target);
+          setTargetProtein(response.data.user.daily_protein_target);
+          console.log("targets set to: " + response.data.daily_calorie_target + " " + response.data.daily_protein_target)
+        }
+      } catch (error) {
+        console.error('Error fetching user targets:', error);
+      }
+    };
+    fetchUserTargets();
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+      fetchUserFoods();
+      fetchUserTargets();
+    }, [])
+  );
+
+  const fetchData = async () => {
+    try {
+      const profileResponse = await axios.get('http://192.168.0.29:8000/api/check_user_profile/', { withCredentials: true });
+      setProfileComplete(profileResponse.data.profile_complete);
+    } catch (error) {
+      console.error("Error checking profile completion:", error);
+      setProfileComplete(false);
+    }
+  };
 
   useEffect(() => {
+    fetchCsrfToken().then(token => {
+      setCsrfToken(token);
+    }).catch(error => {
+      console.error('Error fetching CSRF token:', error);
+    });
     if (refresh) {
       fetchUserFoods();
       setRefresh(false);
     }
   }, [refreshParam]);
+
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get('http://192.168.0.29:8000/api/get_csrf_token/', { withCredentials: true });
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error('Error fetching CSRF token:', error);
+      throw error;
+    }
+  };
 
   const fetchUserFoods = async () => {
     try {
@@ -98,24 +151,49 @@ const Nutrition = () => {
     const capitalizeText = text =>
       text.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
+    const handleDelete = () => {
+      if (!csrfToken) {
+        console.error("CSRF token is not available.");
+        return;
+      }
+
+      axios.delete(`http://192.168.0.29:8000/api/delete_food/${item.id}/`, {
+        headers: {
+          'X-CSRFToken': csrfToken,
+        },
+        withCredentials: true
+      })
+        .then(() => {
+          // Logic to remove the item from UI or state
+          console.log('Food deleted successfully');
+          fetchUserFoods();  // Refresh the list after deletion
+        })
+        .catch(error => {
+          console.error("Error deleting food:", error);
+        });
+    };
     return (
       <View style={styles.foodItem}>
         <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
         <Text style={styles.boldText}>{capitalizeText(item.food_name)}</Text>
         <View style={styles.nutritionInfo}>
-          <Text>{item.calories} kcal  </Text>
+          <Text>{item.calories} kcal</Text>
           <Text>{item.protein}g Protein</Text>
         </View>
+        <Pressable onPress={handleDelete} style={styles.deleteButton}>
+          <Text style={styles.deleteText}>Delete</Text>
+        </Pressable>
       </View>
     );
   };
+
 
   const percentToDegrees = (percent) => {
     return percent * 3.6;
   };
 
   const renderProgressCircle = (currentValue, targetValue, label, color, shadowColor) => {
-    const radius = 50; // Radius of the circle
+    const radius = 50;
     const percentage = Math.min((currentValue / targetValue) * 100, 100);
 
     // Rotation calculations
@@ -255,54 +333,58 @@ const Nutrition = () => {
     });
   };
 
+
+
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={styles.container}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-around', padding: 20 }}>
-          {renderProgressCircle(totals.calories, 2000, 'kcal', '#3399FF', '#ddd')}
-          {renderProgressCircle(totals.protein, 200, 'g Protein', '#34C759', '#ddd')}
-        </View>
-        <View>
-          <TextInput
-            style={styles.searchBar}
-            placeholder="Search for food..."
-            value={query}
-            onChangeText={fetchAutocomplete}
-            placeholderTextColor={'#666'}
-          />
-          <FlatList
+    <View style={styles.container}>
+      {profileComplete ? (
+        <React.Fragment>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', padding: 20 }}>
+            {renderProgressCircle(totals.calories, targetCalories, 'kcal', '#3399FF', '#ddd')}
+            {renderProgressCircle(totals.protein, targetProtein, 'g Protein', '#34C759', '#ddd')}
+          </View>
+          <View>
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search for food..."
+              value={query}
+              onChangeText={fetchAutocomplete}
+              placeholderTextColor={'#666'}
+            />
+            <FlatList
+              style={{ maxHeight: 350, height: flatListHeight }}
+              data={[...suggestions.common, ...suggestions.branded]}
+              keyExtractor={(item, index) => `${item.food_name}-${index}`}
+              renderItem={({ item }) => (
+                <Pressable style={styles.itemContainer} onPress={() => passFoodName(item)}>
+                  <Image source={{ uri: item.photo.thumb }} style={styles.thumbnail} />
+                  <Text style={styles.itemText}>{item.food_name}</Text>
+                </Pressable>
+              )}
+            />
+            <FlatList
+              data={selectedFoods}
+              keyExtractor={(item, index) => index.toString()}
+              renderItem={({ item }) => (
+                <View>
+                  <Text>{item.food_name}</Text>
+                  <Text>Calories: {item.nf_calories}</Text>
+                  <Text>Protein: {item.nf_protein}g</Text>
+                </View>
+              )}
+            />
+          </View>
+          <ScrollView>
 
-            style={{ maxHeight: 350, height: flatListHeight }}
-            data={[...suggestions.common, ...suggestions.branded]}
-            keyExtractor={(item, index) => `${item.food_name}-${index}`}
-            renderItem={({ item }) => (
-              <Pressable style={styles.itemContainer} onPress={() => passFoodName(item)}>
-                <Image source={{ uri: item.photo.thumb }} style={styles.thumbnail} />
-                <Text style={styles.itemText}>{item.food_name}</Text>
-              </Pressable>
-            )}
-          />
-          <FlatList
-            data={selectedFoods}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-              <View>
-                <Text>{item.food_name}</Text>
-                <Text>Calories: {item.nf_calories}</Text>
-                <Text>Protein: {item.nf_protein}g</Text>
-              </View>
-            )}
-          />
-        </View>
-        <ScrollView>
+            {Object.entries(groupedFoods).map(([date, foods]) => renderFoodGroup(date, foods))}
 
-          {Object.entries(groupedFoods).map(([date, foods]) => renderFoodGroup(date, foods))}
-
-        </ScrollView>
-      </View>
-    </TouchableWithoutFeedback>
+          </ScrollView>
+        </React.Fragment>
+      ) : (
+        <Text style={styles.errorMessage}>Please complete your profile to use the nutrition tracker.</Text>
+      )}
+    </View>
   );
-
 };
 
 export default Nutrition;

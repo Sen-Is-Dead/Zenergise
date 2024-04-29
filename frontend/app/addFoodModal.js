@@ -62,9 +62,10 @@ const AddFoodModal = () => {
   }, [foodName]);
 
   const handleAddFood = async () => {
-
+    // Calculate nutrients based on current food item and servings
     const { calories, protein } = calculateNutrients();
-
+  
+    // API endpoint for adding food
     const url = 'http://192.168.0.29:8000/api/add_food/';
     const payload = {
       food_name: foodItem.food_name,
@@ -74,39 +75,38 @@ const AddFoodModal = () => {
       serving_size: selectedMeasure,
       quantity: servings
     };
-
+  
+    // Prepare headers with CSRF token
     let headers = {};
     if (Platform.OS === 'web') {
+      // Retrieve the CSRF token from cookies on web platforms
       const csrfToken = getCookie('csrftoken');
+      headers['X-CSRFToken'] = csrfToken || '';
+    } else {
+      // Use previously fetched CSRF token from API for mobile platforms
       headers['X-CSRFToken'] = csrfToken;
     }
-
+  
     try {
+      // Make the POST request to add food with CSRF protection
       const response = await axios.post(url, payload, {
         withCredentials: true,
-        headers: {
-          'X-CSRFToken': csrfToken,
-        },
+        headers: headers,
       });
+  
+      // On successful addition, navigate to the 'nutrition' route with a refresh flag
       router.replace('nutrition', { refresh: true });
     } catch (error) {
-      console.error("Error adding food:", error);
+      // Log any errors during the food addition
+      console.error("Error adding food:", error.response ? error.response.data : error);
     }
   };
+  
 
   const getCookie = (name) => {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
   };
 
   const calculateNutrients = () => {
